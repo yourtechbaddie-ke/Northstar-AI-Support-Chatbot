@@ -4,21 +4,27 @@ import re
 from pathlib import Path
 from typing import Any
 
-CATALOG = json.loads(
-    (Path(__file__).resolve().parents[2] / "data" / "product_catalog.json").read_text(encoding="utf-8")
-)
+from tools.firebase_inventory import get_live_inventory
 
+CATALOG_PATH = Path(__file__).resolve().parents[2] / "data" / "product_catalog.json"
+CATALOG = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
 RETURN_POLICY = (
     "Northstar accepts eligible returns within 30 days. Items should be unused. "
     "FedEx drop-off is supported, refunds typically take 5–7 days, and exchanges are available."
 )
 
 
+def _catalog() -> list[dict[str, Any]]:
+    """Use Firebase when configured; otherwise use the versioned portfolio catalog."""
+    live = get_live_inventory()
+    return live if live else CATALOG
+
+
 def _find_products(message: str) -> list[dict[str, Any]]:
     q = message.lower()
     tokens = [t for t in re.findall(r"[a-z0-9]+", q) if len(t) > 2]
     scored: list[tuple[int, dict[str, Any]]] = []
-    for product in CATALOG:
+    for product in _catalog():
         haystack = " ".join(
             str(product.get(key, "")) for key in ("name", "category", "fabric", "sku")
         ).lower()
@@ -39,15 +45,10 @@ def _intent(message: str) -> str:
     return "escalation"
 
 
-def _catalog_context(products: list[dict[str, Any]]) -> str:
-    return json.dumps(products, ensure_ascii=False)
-
-
 def _run_crewai(intent: str, message: str, products: list[dict[str, Any]]) -> str | None:
-    """Use CrewAI when an LLM key is configured; keep a deterministic fallback for local demos."""
+    """Run the selected CrewAI specialist when an LLM key is configured."""
     if not os.getenv("OPENAI_API_KEY"):
         return None
-
     try:
         from crewai import Agent, Crew, LLM, Process, Task
 
@@ -60,50 +61,37 @@ def _run_crewai(intent: str, message: str, products: list[dict[str, Any]]) -> st
         if intent == "stock_availability":
             agent = Agent(
                 role="Northstar Luxury Inventory Specialist",
-                goal="Answer availability questions using only the supplied catalog records.",
+                goal="Answer availability questions using only supplied catalog records.",
                 backstory="A precise retail specialist who never invents stock, price, SKU, or product facts.",
-                llm=llm,
-                allow_delegation=False,
-                verbose=False,
+                llm=llm, allow_delegation=False, verbose=False,
             )
-            task = Task(
-                description=(
-                    "Answer the customer using only these matched catalog records. "
-                    "If the records do not establish the answer, say so. Keep the response concise and warm.\n"
-                    f"Customer: {message}\nRecords: {_catalog_context(products)}"
-                ),
-                expected_output="A concise customer-facing availability response.",
-                agent=agent,
+            description = (
+                "Answer the customer using only these matched Northstar records. "
+                "If the records do not establish the answer, say so. Keep it concise and warm.\n"
+                f"Customer: {message}\nRecords: {json.dumps(products, ensure_ascii=False)}"
             )
         elif intent == "return_request":
             agent = Agent(
                 role="Northstar Returns Policy Specialist",
                 goal="Explain only the approved Northstar return policy.",
                 backstory="A careful customer-care specialist who never invents exceptions.",
-                llm=llm,
-                allow_delegation=False,
-                verbose=False,
+                llm=llm, allow_delegation=False, verbose=False,
             )
-            task = Task(
-                description=f"Answer this return question using only this policy: {RETURN_POLICY}\nCustomer: {message}",
-                expected_output="A clear, concise return-policy response.",
-                agent=agent,
-            )
+            description = f"Answer this return question using only this policy: {RETURN_POLICY}\nCustomer: {message}"
         else:
             agent = Agent(
                 role="Northstar Customer Escalation Specialist",
-                goal="Provide a transparent, warm handoff for requests outside the supported knowledge scope.",
+                goal="Provide a transparent, warm handoff for requests outside the supported scope.",
                 backstory="A calm support specialist who never fabricates answers.",
-                llm=llm,
-                allow_delegation=False,
-                verbose=False,
+                llm=llm, allow_delegation=False, verbose=False,
             )
-            task = Task(
-                description=f"Write a helpful holding response for this request and direct the customer to human support: {message}",
-                expected_output="A warm, transparent escalation response.",
-                agent=agent,
-            )
+            description = f"Write a helpful holding response and direct the customer to human support: {message}"
 
+        task = Task(
+            description=description,
+            expected_output="A concise, customer-facing response with no fabricated facts.",
+            agent=agent,
+        )
         crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=False)
         return str(crew.kickoff()).strip()
     except Exception:
@@ -114,17 +102,12 @@ def answer_customer(message: str) -> dict[str, Any]:
     intent = _intent(message)
     products = _find_products(message) if intent == "stock_availability" else []
     ai_response = _run_crewai(intent, message, products)
-
     if ai_response:
         return {"message": ai_response, "intent": intent, "products": products}
 
     if intent == "stock_availability":
         if not products:
-            return {
-                "message": "I couldn't find an exact product match in the Northstar catalog. Share the product name or category and I'll check again.",
-                "intent": intent,
-                "products": [],
-            }
+            return {"message": "I couldn't find an exact product match in the Northstar catalog. Share the product name or category and I'll check again.", "intent": intent, "products": []}
         product = products[0]
         status = product.get("status", "")
         if status == "OUT_OF_STOCK":
@@ -137,16 +120,6 @@ def answer_customer(message: str) -> dict[str, Any]:
 
     if intent == "return_request":
         return {"message": RETURN_POLICY, "intent": intent, "products": []}
-
     if intent == "contact_capture":
-        return {
-            "message": "I can help with that. Please share the email address you'd like Northstar Support to use for follow-up.",
-            "intent": intent,
-            "products": [],
-        }
-
-    return {
-        "message": "I want to make sure you get the right answer. This request needs our human support team, and I can help route it to them.",
-        "intent": intent,
-        "products": [],
-    }
+        return {"message": "I can help with that. Please share the email address you'd like Northstar Support to use for follow-up.", "intent": intent, "products": []}
+    return {"message": "I want to make sure you get the right answer. This request needs our human support team, and I can help route it to them.", "intent": intent, "products": []}
