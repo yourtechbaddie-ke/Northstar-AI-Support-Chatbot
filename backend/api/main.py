@@ -10,30 +10,13 @@ from agents.service import answer_customer
 
 load_dotenv()
 
-app = FastAPI(
-    title="Northstar AI Support API",
-    description="Product-aware customer support powered by CrewAI and Northstar catalog data.",
-    version="1.1.0",
-)
-
-origins = [
-    origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-    if origin.strip()
-]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+app = FastAPI(title="Northstar AI Support API", description="Product-aware customer support powered by CrewAI and Northstar catalog data.", version="1.2.0")
+origins = [origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",") if origin.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["*"])
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     session_id: Optional[str] = Field(default=None, max_length=120)
-
 
 class Product(BaseModel):
     id: str
@@ -42,26 +25,22 @@ class Product(BaseModel):
     price: float
     stock: int
     status: str
-
+    image_url: Optional[str] = None
 
 class ChatResponse(BaseModel):
     message: str
     intent: str
     products: list[Product] = Field(default_factory=list)
 
-
 @app.get("/api/health")
 def health():
-    return {
-        "status": "ok",
-        "service": "northstar-ai-support",
-        "crewai_enabled": bool(os.getenv("OPENAI_API_KEY")),
-    }
-
+    return {"status": "ok", "service": "northstar-ai-support", "crewai_enabled": bool(os.getenv("OPENAI_API_KEY"))}
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     try:
         return answer_customer(request.message)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Northstar Support could not process the request.") from exc
