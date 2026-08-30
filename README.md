@@ -1,75 +1,136 @@
 # Northstar AI Support Chatbot
 
-A portfolio-grade, product-aware customer support application for Northstar Retail Co.
+> **Your intelligent retail concierge.**
 
-**Your intelligent retail concierge.**
+Northstar AI Support is a portfolio-grade, product-aware customer support application for Northstar Retail Co. It combines a refined React experience, a FastAPI service, CrewAI specialist agents, and a grounded Northstar product catalog.
 
-Northstar AI combines a polished conversational frontend with a FastAPI backend and a CrewAI orchestration layer. It is designed to answer product availability questions, explain returns, capture customer contact details, and safely escalate requests outside its supported capabilities.
+## What it demonstrates
 
-## Visual identity — Arctic Couture
+- **AI engineering:** CrewAI specialist agents with grounded prompts and controlled routing.
+- **Backend engineering:** FastAPI, validation, CORS, structured API responses, and error handling.
+- **Frontend engineering:** React + Vite, responsive conversational UX, product cards, loading states, and accessible controls.
+- **Data grounding:** responses are tied to the canonical Northstar catalog rather than invented products or stock.
+- **Production thinking:** deterministic fallback behavior keeps the demo usable when an LLM key is not configured.
 
-- Ink `#101114`
-- Graphite `#252A32`
-- Deep Cobalt `#172F68`
-- Electric Cobalt `#3159C8`
-- Arctic Blue `#C9DDE5`
-- Porcelain `#F5F3EE`
-- Snow `#FAFAF7`
-- Champagne `#D3BE96`
-- Cloud `#E8E9E7`
+## Arctic Couture design system
+
+The chatbot has its own visual identity rather than duplicating the Northstar storefront.
+
+| Token | Hex | Purpose |
+|---|---|---|
+| Ink | `#101114` | Primary dark surfaces |
+| Graphite | `#252A32` | Elevated dark surfaces |
+| Deep Cobalt | `#172F68` | Secondary brand depth |
+| Electric Cobalt | `#3159C8` | AI/action accent |
+| Arctic Blue | `#C9DDE5` | AI surfaces and highlights |
+| Porcelain | `#F5F3EE` | Main canvas |
+| Snow | `#FAFAF7` | Clean surfaces |
+| Champagne | `#D3BE96` | Restrained luxury accent |
+| Cloud | `#E8E9E7` | Borders and muted UI |
 
 ## Architecture
 
 ```text
-Customer
-   |
-   v
-React + Vite frontend
-   |
-   | POST /api/chat
-   v
-FastAPI backend
-   |
-   v
-CrewAI orchestration
-   |
-   +--> Intent / contact extraction
-   +--> Query routing
-   +--> Inventory specialist
-   +--> Returns specialist
-   +--> Escalation specialist
-   |
-   +--> Product catalog / optional Firebase inventory
-   |
-   v
-Grounded response
+                         CUSTOMER
+                            |
+                            v
+                    React + Vite UI
+                            |
+                     POST /api/chat
+                            |
+                            v
+                       FastAPI API
+                            |
+                            v
+                    Support Service
+                            |
+             +--------------+--------------+
+             |              |              |
+        Intent route    Product match   Contact signal
+             |              |              |
+             v              v              v
+          CrewAI       Northstar      Contact capture
+         specialist      catalog
+             |
+       +-----+------+----------------+
+       |            |                |
+   Inventory     Returns        Escalation
+   Specialist   Specialist       Specialist
+       |            |                |
+       +------------+----------------+
+                    |
+                    v
+             Grounded response
+                    |
+                    v
+                  UI card
 ```
 
-## Supported journeys
+When `OPENAI_API_KEY` is configured, the selected CrewAI specialist produces the customer-facing response. Without a key, the same routing layer uses deterministic catalog/policy responses so local development and automated tests remain useful.
 
-- **Stock availability** — identify products and report only known inventory facts.
-- **Returns** — provide the documented Northstar return policy.
-- **Out of scope** — acknowledge the request and route it toward human support.
-- **Contact capture** — request an email when email follow-up is required and none was supplied.
-- **Product-aware responses** — use the canonical catalog instead of inventing products, prices, SKUs, or stock levels.
+## Supported customer journeys
 
-## Safety principle
+### Product availability
 
-Northstar AI does not fabricate product facts, order details, tracking numbers, prices, stock levels, or return eligibility. Unknown information is treated as unknown.
+The service matches the customer's request against the canonical Northstar catalog and returns up to three relevant product records. Stock status is never fabricated.
 
-## Project structure
+### Returns and exchanges
+
+The returns specialist explains the documented policy without inventing exceptions or eligibility decisions.
+
+### Escalation
+
+Unsupported requests receive a transparent handoff instead of a hallucinated answer.
+
+### Contact capture
+
+Requests that clearly ask for email follow-up can be routed into a contact-capture journey.
+
+## Grounding and safety
+
+Northstar AI does **not** fabricate:
+
+- product names
+- SKUs
+- prices
+- stock levels
+- order numbers
+- tracking details
+- return eligibility decisions
+
+Unknown information is treated as unknown and can be escalated to human support.
+
+## Repository structure
 
 ```text
 Northstar-AI-Support-Chatbot/
-├── frontend/                 # React + Vite customer experience
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── main.jsx
+│   │   └── styles.css
+│   ├── .env.example
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
 ├── backend/
-│   ├── api/                  # FastAPI application
-│   ├── agents/               # CrewAI specialist agents
-│   ├── crew/                 # orchestration
-│   └── tools/                # catalog + optional Firebase tools
-├── data/                     # canonical product catalog
-├── public/images/             # Northstar product imagery
-├── docs/                     # architecture notes
+│   ├── api/
+│   │   └── main.py
+│   ├── agents/
+│   │   └── service.py
+│   ├── crew/
+│   │   ├── agents.py
+│   │   ├── crew.py
+│   │   └── tasks.py
+│   ├── tests/
+│   │   └── test_service.py
+│   └── requirements.txt
+├── data/
+│   └── product_catalog.json
+├── docs/
+│   └── architecture.md
+├── public/
+│   └── images/              # product assets will be added here
 ├── .env.example
 ├── .gitignore
 └── README.md
@@ -77,7 +138,7 @@ Northstar-AI-Support-Chatbot/
 
 ## Local development
 
-### Backend
+### 1. Backend
 
 ```bash
 cd backend
@@ -87,7 +148,9 @@ pip install -r requirements.txt
 uvicorn api.main:app --reload --port 8000
 ```
 
-### Frontend
+Create `backend/.env` from the root `.env.example` or your preferred environment configuration. Add `OPENAI_API_KEY` to enable CrewAI LLM responses.
+
+### 2. Frontend
 
 ```bash
 cd frontend
@@ -95,17 +158,17 @@ npm install
 npm run dev
 ```
 
-Create `backend/.env` from `.env.example` and add your CrewAI LLM credentials. Firebase variables are optional for the catalog-first MVP.
-
-Create `frontend/.env` from `frontend/.env.example` and point `VITE_API_BASE_URL` at the FastAPI server.
+Set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env` for local API calls.
 
 ## API
 
 ### `GET /api/health`
 
-Returns service status.
+Returns service status and whether the LLM integration is configured.
 
 ### `POST /api/chat`
+
+Request:
 
 ```json
 {
@@ -114,16 +177,35 @@ Returns service status.
 }
 ```
 
-Response shape:
+Response:
 
 ```json
 {
-  "message": "...",
+  "message": "Yes — the Sovereign Shearling Trench is currently in stock.",
   "intent": "stock_availability",
-  "products": []
+  "products": [
+    {
+      "id": "NSJ001",
+      "name": "Sovereign Shearling Trench",
+      "category": "Jacket",
+      "price": 2850,
+      "stock": 40,
+      "status": "IN_STOCK"
+    }
+  ]
 }
 ```
 
+## Testing
+
+From `backend/`:
+
+```bash
+pytest
+```
+
+The tests cover catalog matching, out-of-stock handling, returns, and escalation behavior without requiring an external LLM call.
+
 ## Portfolio context
 
-This application originated from The Northstar Group Project and is being independently expanded as a standalone portfolio project. The standalone repository is intentionally self-contained so it can be demonstrated, deployed, and evaluated independently.
+This project originated from **The Northstar Group Project** and is being independently expanded as a standalone portfolio application. The goal of the standalone build is to make the AI system, UX, backend, grounding strategy, and deployment independently demonstrable.
