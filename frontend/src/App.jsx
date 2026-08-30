@@ -9,13 +9,35 @@ const starters = [
   { label: 'Returns & exchanges', icon: RefreshCcw, prompt: 'What is your return policy?' },
 ]
 
+function ProductCard({ product }) {
+  const [failed, setFailed] = useState(false)
+  const image = product.image_url
+  return (
+    <article className="product-card">
+      <div className="product-image">
+        {image && !failed ? (
+          <img src={image} alt={product.name} onError={() => setFailed(true)} />
+        ) : (
+          <span className="product-placeholder">NORTHSTAR</span>
+        )}
+      </div>
+      <div className="product-info">
+        <strong>{product.name}</strong>
+        <small>{product.category} · ${Number(product.price || 0).toLocaleString()}</small>
+        <b className={product.status === 'OUT_OF_STOCK' ? 'out' : product.status === 'LOW_STOCK' ? 'limited' : ''}>
+          {product.status === 'OUT_OF_STOCK' ? 'Out of stock' : product.status === 'LOW_STOCK' ? 'Limited availability' : 'Available'}
+        </b>
+      </div>
+    </article>
+  )
+}
+
 function App() {
   const [messages, setMessages] = useState([
     { role: 'assistant', text: 'Welcome to Northstar. I’m your intelligent retail concierge. Ask me about products, availability, or returns.' },
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-
   const sessionId = useMemo(() => crypto.randomUUID(), [])
 
   async function send(text = input) {
@@ -39,6 +61,7 @@ function App() {
 
   function reset() {
     setMessages([{ role: 'assistant', text: 'Welcome to Northstar. I’m your intelligent retail concierge. How can I help?' }])
+    setInput('')
   }
 
   return (
@@ -55,7 +78,9 @@ function App() {
           <h1>Your Northstar,<br /><em>with intelligence.</em></h1>
           <p className="lede">A thoughtful digital concierge for product discovery, availability, returns and customer support.</p>
           <div className="hero-rule" />
+          <div className="hero-meta"><span>CREWAI</span><span>FASTAPI</span><span>FIREBASE</span></div>
         </div>
+
         <section className="chat-card" aria-label="Northstar AI Support">
           <div className="chat-head">
             <div><p className="mini-label">NORTHSTAR AI</p><h2>How can I help?</h2></div>
@@ -67,10 +92,7 @@ function App() {
               <div className="message-content">
                 <span className="speaker">{m.role === 'assistant' ? 'Northstar AI' : 'You'}</span>
                 <p>{m.text}</p>
-                {m.products?.map(product => <div className="product-card" key={product.id}>
-                  <div className="product-image"><span>NS</span></div>
-                  <div><strong>{product.name}</strong><small>{product.category} · ${product.price.toLocaleString()}</small><b className={product.status === 'OUT_OF_STOCK' ? 'out' : ''}>{product.status === 'OUT_OF_STOCK' ? 'Out of stock' : product.status === 'LOW_STOCK' ? 'Limited availability' : 'Available'}</b></div>
-                </div>)}
+                {m.products?.map(product => <ProductCard product={product} key={product.id} />)}
               </div>
             </div>)}
             {loading && <div className="thinking"><span /><span /><span /> Northstar AI is checking your request</div>}
@@ -80,7 +102,7 @@ function App() {
             <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Northstar anything..." aria-label="Message" />
             <button type="submit" aria-label="Send message"><ArrowUp size={18} /></button>
           </form>
-          <p className="disclaimer"><MessageCircle size={12} /> Northstar AI provides support using verified catalog information.</p>
+          <p className="disclaimer"><MessageCircle size={12} /> Northstar AI responds using verified catalog and policy information.</p>
         </section>
       </section>
       <footer><span>NORTHSTAR AI SUPPORT</span><span>Intelligent retail. Refined assistance.</span></footer>
