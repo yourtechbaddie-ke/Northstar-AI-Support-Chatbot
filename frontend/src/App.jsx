@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { ArrowUp, Sparkles, RotateCcw, ShoppingBag, RefreshCcw, MessageCircle } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Render serves the UI and API from the same origin in production.
+const API = import.meta.env.VITE_API_BASE_URL || ''
 const starters = [
   { label: 'Find a product', icon: ShoppingBag, prompt: 'Can you help me find a product?' },
   { label: 'Check availability', icon: Sparkles, prompt: 'Is the Sovereign Shearling Trench in stock?' },
@@ -10,10 +11,9 @@ const starters = [
 
 function ProductCard({ product }) {
   const [failed, setFailed] = useState(false)
-  const image = product.image_url
   const price = Number(product.price || 0).toLocaleString('en-KE', { style: 'currency', currency: 'KES', maximumFractionDigits: 0 })
   return <article className="product-card">
-    <div className="product-image">{image && !failed ? <img src={image} alt={product.name} onError={() => setFailed(true)} /> : <span className="product-placeholder">N</span>}</div>
+    <div className="product-image">{product.image_url && !failed ? <img src={product.image_url} alt={product.name} onError={() => setFailed(true)} /> : <span className="product-placeholder">N</span>}</div>
     <div className="product-info">
       <strong>{product.name}</strong>
       <small>{product.category} · {price}</small>
@@ -57,7 +57,7 @@ function App() {
         <h1>Your Northstar,<br /><em>with intelligence.</em></h1>
         <p className="lede">A thoughtful digital concierge for product discovery, availability, returns and customer support.</p>
         <div className="hero-rule" />
-        <div className="hero-meta"><span>CREWAI</span><span>FASTAPI</span><span>FIREBASE</span></div>
+        <div className="hero-meta"><span>OPENAI</span><span>FASTAPI</span><span>RENDER</span></div>
       </div>
       <section className="chat-card" aria-label="Northstar AI Support">
         <div className="chat-head"><div><p className="mini-label">NORTHSTAR AI</p><h2>How can I help?</h2></div><button className="icon-button" onClick={reset} aria-label="Reset conversation"><RotateCcw size={16} /></button></div>
