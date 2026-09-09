@@ -15,15 +15,11 @@ load_dotenv()
 
 app = FastAPI(
     title="Northstar AI Support API",
-    description="Product-aware customer support powered by CrewAI and Northstar catalog data.",
-    version="1.2.0",
+    description="Product-aware customer support served entirely from Render.",
+    version="2.0.0",
 )
 
-origins = [
-    origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
-    if origin.strip()
-]
+origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -32,9 +28,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     session_id: Optional[str] = Field(default=None, max_length=120)
+
 
 class Product(BaseModel):
     id: str
@@ -45,18 +43,24 @@ class Product(BaseModel):
     status: str
     image_url: Optional[str] = None
 
+
 class ChatResponse(BaseModel):
     message: str
     intent: str
     products: list[Product] = Field(default_factory=list)
+
 
 @app.get("/api/health")
 def health():
     return {
         "status": "ok",
         "service": "northstar-ai-support",
-        "crewai_enabled": bool(os.getenv("OPENAI_API_KEY")),
+        "runtime": "render",
+        "ai_provider": "openai" if os.getenv("OPENAI_API_KEY") else "catalog-fallback",
+        "firebase_enabled": False,
+        "crewai_enabled": False,
     }
+
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
@@ -65,13 +69,9 @@ def chat(request: ChatRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="Northstar Support could not process the request.",
-        ) from exc
+        raise HTTPException(status_code=500, detail="Northstar Support could not process the request.") from exc
 
-# In production Render serves the React/Vite build from the same Web Service.
-# Keeping the API and UI together avoids CORS/base-URL problems for the public demo.
+
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
