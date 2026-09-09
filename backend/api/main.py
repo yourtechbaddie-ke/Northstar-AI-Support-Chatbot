@@ -1,18 +1,36 @@
 import os
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from agents.service import answer_customer
 
 load_dotenv()
 
-app = FastAPI(title="Northstar AI Support API", description="Product-aware customer support powered by CrewAI and Northstar catalog data.", version="1.2.0")
-origins = [origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",") if origin.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["*"])
+app = FastAPI(
+    title="Northstar AI Support API",
+    description="Product-aware customer support powered by CrewAI and Northstar catalog data.",
+    version="1.2.0",
+)
+
+origins = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=origins != ["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
@@ -34,7 +52,11 @@ class ChatResponse(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "northstar-ai-support", "crewai_enabled": bool(os.getenv("OPENAI_API_KEY"))}
+    return {
+        "status": "ok",
+        "service": "northstar-ai-support",
+        "crewai_enabled": bool(os.getenv("OPENAI_API_KEY")),
+    }
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
@@ -43,4 +65,20 @@ def chat(request: ChatRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Northstar Support could not process the request.") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Northstar Support could not process the request.",
+        ) from exc
+
+# In production Render serves the React/Vite build from the same Web Service.
+# Keeping the API and UI together avoids CORS/base-URL problems for the public demo.
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    def serve_frontend(full_path: str):
+        requested = FRONTEND_DIST / full_path
+        if full_path and requested.is_file():
+            return FileResponse(requested)
+        return FileResponse(FRONTEND_DIST / "index.html")
