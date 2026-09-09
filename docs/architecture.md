@@ -1,37 +1,43 @@
 # Northstar AI architecture
 
-## Layers
+## Render-first stack
 
 ### 1. Experience
-React + Vite renders the conversational customer experience. The visual system is Arctic Couture: Ink, Graphite, Deep Cobalt, Electric Cobalt, Arctic Blue, Porcelain, Snow, Champagne and Cloud.
+React + Vite renders the conversational customer experience. Render serves the built frontend from the same public web service as the API.
 
 ### 2. API
-FastAPI exposes `/api/health` and `/api/chat`. Requests are validated with Pydantic and the frontend communicates with the backend through `VITE_API_BASE_URL`.
+FastAPI exposes `/api/health` and `/api/chat`. Requests are validated with Pydantic. Production uses same-origin API calls, so the browser does not depend on localhost or a separate frontend host.
 
 ### 3. Intelligence
-CrewAI provides specialist agents for inventory, returns and escalation. Routing is intentionally narrow: the assistant should not fabricate unsupported facts.
+Northstar uses direct OpenAI API calls when `OPENAI_API_KEY` is configured. There is no CrewAI agent framework. The assistant is deliberately constrained to supplied catalog and policy facts.
 
-### 4. Grounding
-The canonical catalog is `data/product_catalog.json`, derived from the Northstar Group Project inventory. Optional Firebase integration can be added as the live inventory source without changing the frontend contract.
+### 4. Data
+The Render deployment uses the versioned Northstar catalog at `data/product_catalog.json` as its current source of truth. Firebase has been removed from the application and dependency graph.
 
-## Agent model
+## Request flow
 
 ```text
 Customer message
       |
       v
-Intent / contact detection
+FastAPI /api/chat
       |
-      +------ stock ------> Inventory Specialist
+      v
+Intent + catalog matching
       |
-      +------ return -----> Returns Specialist
+      +------ availability ------> Verified catalog records
       |
-      +------ other ------> Escalation Specialist
+      +------ returns -----------> Approved return policy
+      |
+      +------ general -----------> Direct AI support (when configured)
       |
       v
 Grounded response
+      |
+      v
+React frontend served by Render
 ```
 
 ## Data rule
 
-The catalog is the authoritative source for product identity, price and stock in the standalone demo. Firebase should become authoritative for live stock once configured and verified. Unknown information must remain unknown.
+The catalog is authoritative for product identity, price and stock. The assistant must never invent unsupported product, stock, pricing, delivery, discount or policy information.
