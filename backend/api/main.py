@@ -16,10 +16,9 @@ load_dotenv()
 app = FastAPI(
     title="Northstar AI Support API",
     description="Product-aware customer support served entirely from Render.",
-    version="2.0.0",
+    version="2.1.0",
 )
 
-# Keep production CORS explicit so the public frontend can reliably reach this API.
 DEFAULT_ORIGIN = "https://northstar-ai-support.onrender.com"
 origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGIN).split(",") if o.strip()]
 app.add_middleware(
@@ -31,9 +30,15 @@ app.add_middleware(
 )
 
 
+class ChatTurn(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     session_id: Optional[str] = Field(default=None, max_length=120)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=12)
 
 
 class Product(BaseModel):
@@ -67,7 +72,7 @@ def health():
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     try:
-        return answer_customer(request.message)
+        return answer_customer(request.message, [turn.model_dump() for turn in request.history])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
