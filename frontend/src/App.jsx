@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ArrowUp, Sparkles, RotateCcw, ShoppingBag, RefreshCcw, MessageCircle } from 'lucide-react'
 
-// Production API is a dedicated Render service; local development can override it with VITE_API_BASE_URL.
 const API = (import.meta.env.VITE_API_BASE_URL || 'https://northstar-ai-api.onrender.com').replace(/\/$/, '')
 const starters = [
   { label: 'Find a product', icon: ShoppingBag, prompt: 'Can you help me find a product?' },
@@ -26,24 +25,32 @@ function App() {
   const [messages, setMessages] = useState([{ role: 'assistant', text: 'Welcome to Northstar. I’m your intelligent retail concierge. Ask me about products, availability, or returns.' }])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const sessionId = useMemo(() => crypto.randomUUID(), [])
 
   async function send(text = input) {
     const message = text.trim()
     if (!message || loading) return
+    const history = messages.slice(-10).map(({ role, text: turnText }) => ({ role, text: turnText }))
     setMessages(prev => [...prev, { role: 'user', text: message }])
-    setInput(''); setLoading(true)
+    setInput(''); setLoading(true); setError('')
     try {
-      const res = await fetch(`${API}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, session_id: sessionId }) })
-      if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-      const data = await res.json()
+      const res = await fetch(`${API}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ message, session_id: sessionId, history }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || `Request failed: ${res.status}`)
+      if (!data.message) throw new Error('Northstar returned an empty response.')
       setMessages(prev => [...prev, { role: 'assistant', text: data.message, products: data.products || [], intent: data.intent }])
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', text: 'I’m having trouble reaching Northstar Support right now. Please try again in a moment.' }])
+    } catch (err) {
+      setError(err.message || 'The support service is temporarily unavailable.')
+      setMessages(prev => [...prev, { role: 'assistant', text: 'I couldn’t complete that request just now. Please try again — your conversation is still here.' }])
     } finally { setLoading(false) }
   }
 
-  function reset() { setMessages([{ role: 'assistant', text: 'Welcome to Northstar. I’m your intelligent retail concierge. How can I help?' }]); setInput('') }
+  function reset() { setMessages([{ role: 'assistant', text: 'Welcome to Northstar. I’m your intelligent retail concierge. How can I help?' }]); setInput(''); setError('') }
 
   return <main className="app-shell">
     <header className="topbar">
@@ -69,8 +76,9 @@ function App() {
           {loading && <div className="thinking"><span /><span /><span /> Northstar AI is checking your request</div>}
         </div>
         <div className="starter-row">{starters.map(({ label, icon: Icon, prompt }) => <button key={label} onClick={() => send(prompt)}><Icon size={14} />{label}</button>)}</div>
-        <form className="composer" onSubmit={e => { e.preventDefault(); send() }}><input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Northstar anything..." aria-label="Message" /><button type="submit" aria-label="Send message"><ArrowUp size={18} /></button></form>
-        <p className="disclaimer"><MessageCircle size={12} /> Northstar AI responds using verified catalog and policy information.</p>
+        <form className="composer" onSubmit={e => { e.preventDefault(); send() }}><input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Northstar anything..." aria-label="Message" /><button type="submit" aria-label="Send message" disabled={loading}><ArrowUp size={18} /></button></form>
+        {error && <p className="disclaimer" role="status"><MessageCircle size={12} /> {error}</p>}
+        {!error && <p className="disclaimer"><MessageCircle size={12} /> Northstar AI responds using verified catalog and policy information.</p>}
       </section>
     </section>
     <footer><span>NORTHSTAR AI SUPPORT</span><span>Intelligent retail. Refined assistance.</span></footer>
