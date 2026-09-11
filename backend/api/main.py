@@ -19,7 +19,9 @@ app = FastAPI(
     version="2.0.0",
 )
 
-origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+# Keep production CORS explicit so the public frontend can reliably reach this API.
+DEFAULT_ORIGIN = "https://northstar-ai-support.onrender.com"
+origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGIN).split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
