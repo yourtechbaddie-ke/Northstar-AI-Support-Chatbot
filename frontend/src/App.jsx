@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { ArrowUp, Sparkles, RotateCcw, ShoppingBag, RefreshCcw, MessageCircle } from 'lucide-react'
 
-// Render serves the UI and API from the same origin in production.
-const API = import.meta.env.VITE_API_BASE_URL || ''
+// Production API is a dedicated Render service; local development can override it with VITE_API_BASE_URL.
+const API = (import.meta.env.VITE_API_BASE_URL || 'https://northstar-ai-api.onrender.com').replace(/\/$/, '')
 const starters = [
   { label: 'Find a product', icon: ShoppingBag, prompt: 'Can you help me find a product?' },
   { label: 'Check availability', icon: Sparkles, prompt: 'Is the Sovereign Shearling Trench in stock?' },
@@ -35,7 +35,7 @@ function App() {
     setInput(''); setLoading(true)
     try {
       const res = await fetch(`${API}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, session_id: sessionId }) })
-      if (!res.ok) throw new Error('Request failed')
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`)
       const data = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', text: data.message, products: data.products || [], intent: data.intent }])
     } catch {
